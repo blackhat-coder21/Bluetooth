@@ -223,6 +223,7 @@ public class MainActivity extends AppCompatActivity {
                 showPairedDevices();
             }
             else {
+
                 Toast.makeText(this, "Permission required to access Bluetooth", Toast.LENGTH_SHORT).show();
             }
         }
