@@ -22,7 +22,11 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Set;
 import java.util.UUID;
@@ -129,41 +133,73 @@ public class MainActivity extends AppCompatActivity {
 
     private void connectToDevice(BluetoothDevice device) {
         new Thread(() -> {
+            runOnUiThread(() -> {
+                Log.e(TAG, "Reached: 1");
+                progressDialog.show();
+                Log.e(TAG, "Reached: 2");
+            });
+            Log.e(TAG, "Reached: 3");
+            // Check Bluetooth permissions are granted
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                throw new SecurityException("No BLUETOOTH_CONNECT permission");
+            }
+            Log.e(TAG, "Reached: 4");
+            bluetoothAdapter.cancelDiscovery();
+            // Initialize the Bluetooth socket and connect
             try {
-                runOnUiThread(() -> {
-                    progressDialog.show();
-                });
-
-                // Check Bluetooth permissions are granted
-                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                    throw new SecurityException("No BLUETOOTH_CONNECT permission");
-                }
-
-
-                bluetoothAdapter.cancelDiscovery();
-                // Initialize the Bluetooth socket and connect
-                bluetoothSocket = device.createRfcommSocketToServiceRecord(UUID.fromString(SERVICE_UUID));
+                // Use reflection to create the Bluetooth socket
+                bluetoothSocket = (BluetoothSocket) device.getClass().getMethod("createRfcommSocket", int.class).invoke(device, 1);
                 bluetoothSocket.connect();
+                Log.e(TAG, "Reached: 5 - Connected");
 
                 runOnUiThread(() -> {
-                    // Dismiss the progress dialog once connected
                     progressDialog.dismiss();
                     Toast.makeText(MainActivity.this, "Connected to " + device.getName(), Toast.LENGTH_SHORT).show();
                 });
-            }
-            catch (IOException e) {
-                Log.e(TAG, "Error connecting to device: " + e.getMessage());
 
+                File fileToSend = new File("C://Users//Ankit//AndroidStudioProjects//Bluetooth//app//src//main//java//com//example//bluetooth//sample.txt");
+                // Call the method to transfer the file
+                transferFile(fileToSend);
+
+            }
+            catch (Exception e) {
+                Log.e(TAG, "Reflection connection failed: " + e.getMessage());
                 runOnUiThread(() -> {
-                    // Dismiss the progress dialog if an error occurs
                     progressDialog.dismiss();
                     Toast.makeText(MainActivity.this, "Failed to connect to " + device.getName(), Toast.LENGTH_SHORT).show();
                 });
-
-                // Close the socket to avoid memory leaks
                 closeConnection();
             }
         }).start();
+    }
+
+    // Method to transfer file via Bluetooth
+    private void transferFile(File fileToSend) {
+        try (FileInputStream fis = new FileInputStream(fileToSend);
+             OutputStream outputStream = bluetoothSocket.getOutputStream()) {
+
+            byte[] buffer = new byte[1024]; // Buffer size
+            int bytesRead;
+
+            // Notify start of file transfer
+            Log.e(TAG, "Starting file transfer...");
+
+            // Read file and write to output stream
+            while ((bytesRead = fis.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, bytesRead);
+            }
+
+            // Flush the output stream to ensure all data is sent
+            outputStream.flush();
+            Log.e(TAG, "File transfer completed");
+
+            runOnUiThread(() -> Toast.makeText(MainActivity.this, "File sent successfully", Toast.LENGTH_SHORT).show());
+
+        }
+        catch (IOException e) {
+            Log.e(TAG, "Error during file transfer: " + e.getMessage());
+            runOnUiThread(() -> Toast.makeText(MainActivity.this, "Failed to send file", Toast.LENGTH_SHORT).show());
+        }
     }
 
     private void closeConnection() {
